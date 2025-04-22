@@ -1,31 +1,32 @@
 package org.example.core
 
 import IOManager
-import org.example.commands.*
+import kotlinx.serialization.json.Json
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
 
 
 class CommandProcessor(
-    private var commands: Set<String>,
+    private val client: Client,
     private val ioManager: IOManager,
-    fileName: String
 ) {
     private lateinit var vehicleReader: VehicleReader
-
-    constructor(ioManager: IOManager, fileName: String) : this(emptySet(), ioManager, fileName)
-
-    val collectionManager = CollectionManager(fileName)
+    private var commands =   mutableSetOf<String>()
     private val maxRecursionDepth = 5
     private var recursionDepth = 0
     private val executedScripts =
         mutableSetOf<String>() // protection against recursion & may be a file reading in the file
 
     fun start() {
-        if (commands.isEmpty()) commands = loadCommands()
+        if (commands.isEmpty()) commands = loadCommands().toMutableSet()
         ioManager.outputLine("Transport manager 3000")
-        //todo: HELP from server
+        try {
+            val helpResponse: List<String> = client.sendRequest("help" to "")
+            ioManager.outputLine("Available commands: ${helpResponse.joinToString(", ")}")
+        }  catch (e: Exception) {
+            ioManager.error("Failed to fetch help information: ${e.message}")
+        }
         while (true) {
             ioManager.outputInline("> ")
             val input = ioManager.readLine().trim()
@@ -38,19 +39,18 @@ class CommandProcessor(
             }
         }
     }
-//TODO: from server
+
     private fun loadCommands(): Set<String> {
-        vehicleReader = VehicleReader(ioManager)
-        val commands = HashSet<String>();
-        return commands
+        return try {
+            client.sendRequest("get_commands" to "")
+        } catch (e: Exception) {
+            ioManager.error("Failed to load commands: ${e.message}")
+            emptySet()
+        }
     }
 
     private fun processCommand(input: String) {
         val parts = input.split("\\s+".toRegex())
-        val command = commands[parts[0]] ?: run {
-            ioManager.outputLine("Unknown command: ${parts[0]}")
-            return
-        }
         if (command.getName() == "execute_script") {
             if (parts.isEmpty()) {
                 ioManager.outputLine("Error: The file name is not specified.")
@@ -60,7 +60,9 @@ class CommandProcessor(
             return
         }
         try {
-            //TODO^ from server command.execute(parts.drop(1), collectionManager, ioManager)
+           val commandName = parts[0]
+            val args = parts.drop(1).joinToString { " " }
+            val response - cl
         } catch (e: Exception) {
             ioManager.outputLine("Error executing command: ${e.message}")
         }
@@ -146,10 +148,10 @@ class CommandProcessor(
             ioManager.error("Неполные данные для команды add в скрипте")
         }
     }
-    fun getCommands(): Map<String, Command> {
+    fun getCommands(): Set<String> {
         return commands
     }
-    fun setCommands(com: Map<String, Command>) {
-         commands=com
+    fun setCommands(com: Set<String>) {
+         commands=com.toMutableSet()
     }
 }
