@@ -8,13 +8,13 @@ import java.nio.file.Paths
 
 
 class CommandProcessor(
-    private var commands: Map<String, Command>,
+    private var commands: Set<String>,
     private val ioManager: IOManager,
     fileName: String
 ) {
     private lateinit var vehicleReader: VehicleReader
 
-    constructor(ioManager: IOManager, fileName: String) : this(emptyMap(), ioManager, fileName)
+    constructor(ioManager: IOManager, fileName: String) : this(emptySet(), ioManager, fileName)
 
     val collectionManager = CollectionManager(fileName)
     private val maxRecursionDepth = 5
@@ -25,7 +25,7 @@ class CommandProcessor(
     fun start() {
         if (commands.isEmpty()) commands = loadCommands()
         ioManager.outputLine("Transport manager 3000")
-        commands["help"]?.execute(emptyList(), collectionManager, ioManager)
+        //todo: HELP from server
         while (true) {
             ioManager.outputInline("> ")
             val input = ioManager.readLine().trim()
@@ -38,44 +38,11 @@ class CommandProcessor(
             }
         }
     }
-
-    private fun loadCommands(): Map<String, Command> {
+//TODO: from server
+    private fun loadCommands(): Set<String> {
         vehicleReader = VehicleReader(ioManager)
-        val commands = listOf(
-            AddCommand(vehicleReader),
-            AddIfMaxCommand(vehicleReader),
-            AddIfMinCommand(vehicleReader),
-            ClearCommand(),
-            FilterByEnginePowerCommand(),
-            HelpCommand(emptyMap()),
-            InfoCommand(),
-            MinByNameCommand(),
-            RemoveAnyByEnginePowerCommand(),
-            RemoveByIdCommand(),
-            RemoveFirstCommand(),
-            ShowCommand(),
-            SaveCommand(),
-            UpdateIdCommand(vehicleReader),
-
-            ).associateBy { it.getName() }
-        val help = HelpCommand(commands)
-        val allCommands = listOf(
-            help,
-            AddCommand(vehicleReader),
-            AddIfMaxCommand(vehicleReader),
-            AddIfMinCommand(vehicleReader),
-            ClearCommand(),
-            FilterByEnginePowerCommand(),
-            InfoCommand(),
-            MinByNameCommand(),
-            RemoveAnyByEnginePowerCommand(),
-            RemoveByIdCommand(),
-            RemoveFirstCommand(),
-            ShowCommand(),
-            SaveCommand(),
-            UpdateIdCommand(vehicleReader),
-        ).associateBy { it.getName() }
-        return allCommands
+        val commands = HashSet<String>();
+        return commands
     }
 
     private fun processCommand(input: String) {
@@ -93,7 +60,7 @@ class CommandProcessor(
             return
         }
         try {
-            command.execute(parts.drop(1), collectionManager, ioManager)
+            //TODO^ from server command.execute(parts.drop(1), collectionManager, ioManager)
         } catch (e: Exception) {
             ioManager.outputLine("Error executing command: ${e.message}")
         }
