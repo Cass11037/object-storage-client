@@ -1,7 +1,7 @@
 package org.example.requests
 
 import kotlinx.serialization.Serializable
+import org.example.model.Vehicle
 
 @Serializable
-data class IdRequest(val id: Int)
-
+data  class AddIfMaxRequest (val vehicle: Vehicle)

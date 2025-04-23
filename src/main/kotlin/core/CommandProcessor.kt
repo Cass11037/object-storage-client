@@ -1,8 +1,7 @@
 package org.example.core
 
 import IOManager
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
+import org.example.requests.*
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -13,17 +12,74 @@ class CommandProcessor(
     private val ioManager: IOManager,
 ) {
     private lateinit var vehicleReader: VehicleReader
-    private var commands =   mutableSetOf<String>()
+    private val commandArgBuilders: Map<String, () -> Any?> = mapOf(
+        "add" to {
+            val reader = VehicleReader(ioManager)
+            AddRequest(reader.readVehicle())
+        },
+        "add_if_max" to {
+            val reader = VehicleReader(ioManager)
+            AddIfMaxRequest(reader.readVehicle())
+        },
+        "add_if_min" to {
+            val reader = VehicleReader(ioManager)
+            AddIfMinRequest(reader.readVehicle())
+        },
+        "clear" to {
+            NoArgs
+        },
+        "filter_by_engine_power" to {
+            ioManager.outputLine("Enter min engine power:")
+            val power = ioManager.readLine().toIntOrNull()
+                ?: throw IllegalArgumentException("Invalid engine power")
+            FilterByEnginePowerRequest(power)
+        },
+        "info" to {
+            NoArgs
+        },
+        "min_by_name" to {
+            NoArgs
+        },
+        "remove_any_by_engine_power" to {
+            ioManager.outputLine("Enter engine power:")
+            val power = ioManager.readLine().toIntOrNull()
+                ?: throw IllegalArgumentException("Invalid engine power")
+            FilterByEnginePowerRequest(power)
+        },
+        "remove_by_id" to {
+            ioManager.outputLine("Enter ID:")
+            val id = ioManager.readLine().toIntOrNull()
+                ?: throw IllegalArgumentException("Invalid ID")
+            IdRequest(id)
+        },
+        "remove_first" to {
+            NoArgs
+        },
+        "show" to {
+            NoArgs
+        },
+        "save" to {
+            NoArgs
+        },
+        "update_id" to {
+            ioManager.outputLine("Enter ID:")
+            val id = ioManager.readLine().toIntOrNull()
+                ?: throw IllegalArgumentException("Invalid ID")
+            val reader = VehicleReader(ioManager)
+            UpdateIdRequest(id, reader.readVehicle())
+        }
+    )
+
     private val maxRecursionDepth = 5
     private var recursionDepth = 0
     private val executedScripts =
         mutableSetOf<String>() // protection against recursion & may be a file reading in the file
 
     fun start() {
-        if (commands.isEmpty()) commands = loadCommands().toMutableSet()
         ioManager.outputLine("Transport manager 3000")
         try {
-            val helpResponse: List<String> = client.sendCommand("help")
+            val noObject = NoArgs
+            val helpResponse: List<String> = client.sendCommand("help", noObject )
             ioManager.outputLine("Available commands: ${helpResponse.joinToString(", ")}")
         }  catch (e: Exception) {
             ioManager.error("Failed to fetch help information: ${e.message}")
@@ -41,46 +97,28 @@ class CommandProcessor(
         }
     }
 
-    private fun loadCommands(): Set<String> {
+    /*private fun loadCommands(): Set<String> {
         return try {
             client.sendRequest("get_commands" to "")
         } catch (e: Exception) {
             ioManager.error("Failed to load commands: ${e.message}")
             emptySet()
         }
-    }
+    }*/
 
     private fun processCommand(input: String) {
         val parts = input.split("\\s+".toRegex(), 2)
         val commandName = parts[0]
-        val args = parts.drop(1)
         try {
-            when (commandName) {
-                "execute_script" -> {
-                    if (args.isEmpty()) {
-                        ioManager.outputLine("Error: The file name is not specified.")
-                        return
-                    }
-                    executeScript(args[0])
-                    return
-                }
-                "add" -> {
-                    val reader = VehicleReader(ioManager)
-                    val vehicle = reader.readVehicle()
-                    when (val response = client.sendCommand <Any>("add", listOf(Json.encodeToString(vehicle)) )) {
-                        is String -> ioManager.outputLine(response)
-                        is List<*> -> ioManager.outputLine(response.joinToString  ("\n"))
-                        else -> ioManager.error("Unexpected response type")
-                    }
-                }
-                else -> {
-                    when ( val response = client.sendCommand<Any>(commandName, args)) {
-                        is String -> ioManager.outputLine(response)
-                        is List<*> -> ioManager.outputLine(response.joinToString  ("\n"))
-                        else -> ioManager.error("Unexpected response type")
-                    }
-                }
+            val response = if (commandArgBuilders.containsKey(commandName)) {
+                val args = commandArgBuilders[commandName]?.invoke()
+                client.sendCommand<String, Any>(commandName, args)
+            } else {
+                // Если команды нет в мапе, обрабатываем как обычную команду с аргументами
+                client.sendCommand<String, List<String>>(commandName, parts.drop(1))
             }
+            ioManager.outputLine(response)
+
         } catch (e: Exception) {
             ioManager.outputLine("Error executing command: ${e.message}")
         }
@@ -159,11 +197,5 @@ class CommandProcessor(
         } else {
             ioManager.error("Неполные данные для команды add в скрипте")
         }
-    }
-    fun getCommands(): Set<String> {
-        return commands
-    }
-    fun setCommands(com: Set<String>) {
-         commands=com.toMutableSet()
     }
 }

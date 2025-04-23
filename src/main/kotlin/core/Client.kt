@@ -8,6 +8,7 @@ import org.example.requests.CommandRequest
 import java.net.DatagramPacket
 import java.net.InetAddress
 import java.net.SocketTimeoutException
+import kotlinx.serialization.serializer
 
 class Client (
     private val serverAdress: String,
@@ -39,12 +40,14 @@ class Client (
         val jsonResponse = sendRequest(jsonRequest)
         return json.decodeFromString(jsonResponse)
     }
-    inline fun <reified T> sendCommand(command: String, arguments: Args? = null): T {
+    inline fun <reified T, reified Args> sendCommand(command: String, arguments: Args? = null): T {
         val request = CommandRequest(command, arguments)
         val jsonRequest = json.encodeToString(request)
         val jsonResponse = sendRequest(jsonRequest)
         return json.decodeFromString(jsonResponse)
     }
+
+
 
     fun close() {
         socket.close()
