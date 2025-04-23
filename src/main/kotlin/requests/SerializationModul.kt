@@ -17,9 +17,3 @@ val requestModule = SerializersModule {
         subclass(FilterByEnginePowerRequest::class, FilterByEnginePowerRequest.serializer())
     }
 }
-
-val json = Json {
-    ignoreUnknownKeys = true
-    classDiscriminator = "type"
-    serializersModule = requestModule
-}
