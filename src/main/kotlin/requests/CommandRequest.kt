@@ -3,5 +3,7 @@ package org.example.requests
 import kotlinx.serialization.Serializable
 
 @Serializable
-open class CommandRequestInterface () {
-}
+data class CommandRequest(
+    val command: String,
+    val arguments: List<String>?
+)

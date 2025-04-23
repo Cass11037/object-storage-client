@@ -5,11 +5,9 @@ import java.net.DatagramSocket
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
-import org.example.requests.FullCommandRequest
 import java.net.DatagramPacket
 import java.net.InetAddress
 import java.net.SocketTimeoutException
-import org.example.requests.CommandRequestInterface
 import org.example.requests.*
 
 class Client (
@@ -21,18 +19,6 @@ class Client (
 
     val json = Json {
         ignoreUnknownKeys = true
-        classDiscriminator = "type"
-        serializersModule = SerializersModule {
-            polymorphic(CommandRequestInterface::class) {
-                subclass(NoArgs::class, NoArgs.serializer())
-                subclass(IdRequest::class, IdRequest.serializer())
-                subclass(AddRequest::class, AddRequest.serializer())
-                subclass(AddIfMaxRequest::class, AddIfMaxRequest.serializer())
-                subclass(AddIfMinRequest::class, AddIfMinRequest.serializer())
-                subclass(UpdateIdRequest::class, UpdateIdRequest.serializer())
-                subclass(FilterByEnginePowerRequest::class, FilterByEnginePowerRequest.serializer())
-            }
-        }
     }
     private var maxRetries : Int
     private var buf = ByteArray(65535)
@@ -67,9 +53,8 @@ class Client (
         val jsonResponse = sendRequest(jsonRequest)
         return json.decodeFromString(jsonResponse)
     }
-    inline fun <reified T> sendCommand(command: String, arguments: CommandRequestInterface): T {
-        val request = FullCommandRequest(command, arguments)
-        val jsonRequest = json.encodeToString(request)
+    inline fun <reified T> sendCommand(command: CommandRequest): T {
+        val jsonRequest = json.encodeToString(command)
         val jsonResponse = sendRequest(jsonRequest)
         return json.decodeFromString(jsonResponse)
     }

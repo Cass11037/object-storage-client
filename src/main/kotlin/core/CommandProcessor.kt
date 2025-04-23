@@ -1,7 +1,7 @@
 package org.example.core
 
 import IOManager
-import org.example.requests.*
+import org.example.requests.CommandRequest
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -10,86 +10,27 @@ class CommandProcessor(
     private val client: Client,
     private val ioManager: IOManager,
 ) {
-    private lateinit var vehicleReader: VehicleReader
-    private val commandArgBuilders: Map<String, () -> Any?> = mapOf(
-        "add" to {
-            val reader = VehicleReader(ioManager)
-            AddRequest(reader.readVehicle())
-        },
-        "add_if_max" to {
-            val reader = VehicleReader(ioManager)
-            AddIfMaxRequest(reader.readVehicle())
-        },
-        "add_if_min" to {
-            val reader = VehicleReader(ioManager)
-            AddIfMinRequest(reader.readVehicle())
-        },
-        "clear" to {
-            NoArgs
-        },
-        "filter_by_engine_power" to {
-            ioManager.outputLine("Enter min engine power:")
-            val power = ioManager.readLine().toIntOrNull()
-                ?: throw IllegalArgumentException("Invalid engine power")
-            FilterByEnginePowerRequest(power)
-        },
-        "info" to {
-            NoArgs
-        },
-        "min_by_name" to {
-            NoArgs
-        },
-        "remove_any_by_engine_power" to {
-            ioManager.outputLine("Enter engine power:")
-            val power = ioManager.readLine().toIntOrNull()
-                ?: throw IllegalArgumentException("Invalid engine power")
-            FilterByEnginePowerRequest(power)
-        },
-        "remove_by_id" to {
-            ioManager.outputLine("Enter ID:")
-            val id = ioManager.readLine().toIntOrNull()
-                ?: throw IllegalArgumentException("Invalid ID")
-            IdRequest(id)
-        },
-        "remove_first" to {
-            NoArgs
-        },
-        "show" to {
-            NoArgs
-        },
-        "save" to {
-            NoArgs
-        },
-        "update_id" to {
-            ioManager.outputLine("Enter ID:")
-            val id = ioManager.readLine().toIntOrNull()
-                ?: throw IllegalArgumentException("Invalid ID")
-            val reader = VehicleReader(ioManager)
-            UpdateIdRequest(id, reader.readVehicle())
-        }
-    )
-
     private val maxRecursionDepth = 5
     private var recursionDepth = 0
-    private val executedScripts =
-        mutableSetOf<String>() // protection against recursion & may be a file reading in the file
+    private val executedScripts = mutableSetOf<String>()
 
     fun start() {
         ioManager.outputLine("Transport manager 3000")
         try {
-            val noObject = NoArgs()
-            val helpResponse: List<String> = client.sendCommand("help", noObject)
+            val helpRequest = CommandRequest("help", emptyList())
+            val helpResponse: List<String> = client.sendCommand(helpRequest)
             ioManager.outputLine("Available commands: ${helpResponse.joinToString(", ")}")
         } catch (e: Exception) {
             ioManager.error("Failed to fetch help information: ${e.message}")
         }
+
         while (true) {
             ioManager.outputInline("> ")
             val input = ioManager.readLine().trim()
-            val executeScriptRegex = "^execute_script\\s.+\$".toRegex()
+            val executeScriptRegex = "^execute_script\\s.+$".toRegex()
             when {
                 input == "exit" -> break
-                executeScriptRegex.matches(input) -> executeScript(input)
+                executeScriptRegex.matches(input) -> executeScript(input.substringAfter(" "))
                 input.isEmpty() -> continue
                 else -> processCommand(input)
             }
@@ -97,20 +38,16 @@ class CommandProcessor(
     }
 
     private fun processCommand(input: String) {
-        val parts = input.split("\\s+".toRegex(), 2)
+        val parts = input.split("\\s+").filter { it.isNotBlank() }
+        if (parts.isEmpty()) return
+
         val commandName = parts[0]
+        val args = if (parts.size > 1) parts.subList(1, parts.size) else emptyList()
+
         try {
-            // Если команда есть в мапе, обрабатываем ее с соответствующими аргументами
-            val response = if (commandArgBuilders.containsKey(commandName)) {
-                val args = commandArgBuilders[commandName]?.invoke() as? CommandRequestInterface
-                    ?: throw IllegalArgumentException("Invalid arguments for command: $commandName")
-                client.sendCommand<String>(commandName, args)
-            } else {
-                throw IllegalArgumentException("Invalid arguments for command: $commandName")
-            }
-
+            val request = CommandRequest(commandName, args)
+            val response: String = client.sendCommand(request)
             ioManager.outputLine(response)
-
         } catch (e: Exception) {
             ioManager.outputLine("Error executing command: ${e.message}")
         }
@@ -163,30 +100,11 @@ class CommandProcessor(
                 val line = ioManager.readLine().trim() ?: continue
                 if (line.isNotEmpty()) {
                     ioManager.outputLine("[Script]> $line")
-                    when {
-                        line.startsWith("add", ignoreCase = true) -> processAddCommandInScript()
-                        else -> processCommand(line)
-                    }
+                    processCommand(line)
                 }
             }
         } finally {
             ioManager.setInput(originalInput)
-        }
-    }
-
-    private fun processAddCommandInScript() {
-        val vehicleData = mutableListOf<String>()
-        while (ioManager.hasNextLine() && vehicleData.size < 7) {
-            val line = ioManager.readLine().trim()
-            if (line.isNotEmpty()) {
-                vehicleData.add(line)
-            }
-        }
-        if (vehicleData.size == 7) {
-            val fullCommand = "add\n${vehicleData.joinToString("\n")}"
-            processCommand(fullCommand)
-        } else {
-            ioManager.error("Неполные данные для команды add в скрипте")
         }
     }
 }
