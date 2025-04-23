@@ -1,6 +1,7 @@
 package org.example.core
 
 import IOManager
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.nio.file.Files
 import java.nio.file.Path
@@ -22,7 +23,7 @@ class CommandProcessor(
         if (commands.isEmpty()) commands = loadCommands().toMutableSet()
         ioManager.outputLine("Transport manager 3000")
         try {
-            val helpResponse: List<String> = client.sendRequest("help" to "")
+            val helpResponse: List<String> = client.sendCommand("help")
             ioManager.outputLine("Available commands: ${helpResponse.joinToString(", ")}")
         }  catch (e: Exception) {
             ioManager.error("Failed to fetch help information: ${e.message}")
@@ -50,19 +51,36 @@ class CommandProcessor(
     }
 
     private fun processCommand(input: String) {
-        val parts = input.split("\\s+".toRegex())
+        val parts = input.split("\\s+".toRegex(), 2)
+        val commandName = parts[0]
+        val args = parts.drop(1)
         try {
-           val commandName = parts[0]
-            if (commandName == "execute_script") {
-                if (parts.size < 2) {
-                    ioManager.outputLine("Error: The file name is not specified.")
+            when (commandName) {
+                "execute_script" -> {
+                    if (args.isEmpty()) {
+                        ioManager.outputLine("Error: The file name is not specified.")
+                        return
+                    }
+                    executeScript(args[0])
                     return
                 }
-                executeScript(parts[1])
-                return
+                "add" -> {
+                    val reader = VehicleReader(ioManager)
+                    val vehicle = reader.readVehicle()
+                    when (val response = client.sendCommand <Any>("add", listOf(Json.encodeToString(vehicle)) )) {
+                        is String -> ioManager.outputLine(response)
+                        is List<*> -> ioManager.outputLine(response.joinToString  ("\n"))
+                        else -> ioManager.error("Unexpected response type")
+                    }
+                }
+                else -> {
+                    when ( val response = client.sendCommand<Any>(commandName, args)) {
+                        is String -> ioManager.outputLine(response)
+                        is List<*> -> ioManager.outputLine(response.joinToString  ("\n"))
+                        else -> ioManager.error("Unexpected response type")
+                    }
+                }
             }
-            val args = parts.drop(1).joinToString { " " }
-            val response = client.sendRequest<Pair<String, String>>(commandName to args)
         } catch (e: Exception) {
             ioManager.outputLine("Error executing command: ${e.message}")
         }
