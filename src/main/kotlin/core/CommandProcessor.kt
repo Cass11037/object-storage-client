@@ -77,7 +77,7 @@ class CommandProcessor(
     fun start() {
         ioManager.outputLine("Transport manager 3000")
         try {
-            val noObject = NoArgs
+            val noObject = NoArgs()
             val helpResponse: List<String> = client.sendCommand("help", noObject)
             ioManager.outputLine("Available commands: ${helpResponse.joinToString(", ")}")
         } catch (e: Exception) {
@@ -102,11 +102,11 @@ class CommandProcessor(
         try {
             // Если команда есть в мапе, обрабатываем ее с соответствующими аргументами
             val response = if (commandArgBuilders.containsKey(commandName)) {
-                val args = commandArgBuilders[commandName]?.invoke()
-                client.sendCommand<String, Any>(commandName, args)
+                val args = commandArgBuilders[commandName]?.invoke() as? CommandRequestInterface
+                    ?: throw IllegalArgumentException("Invalid arguments for command: $commandName")
+                client.sendCommand<String>(commandName, args)
             } else {
-                // Если команды нет в мапе, обрабатываем как обычную команду с аргументами
-                client.sendCommand<String, List<String>>(commandName, parts.drop(1))
+                throw IllegalArgumentException("Invalid arguments for command: $commandName")
             }
 
             ioManager.outputLine(response)

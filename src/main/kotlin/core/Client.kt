@@ -1,14 +1,16 @@
 package org.example.core
 
-import com.sun.org.apache.bcel.internal.util.Args
 import kotlinx.serialization.encodeToString
 import java.net.DatagramSocket
 import kotlinx.serialization.json.Json
-import org.example.requests.CommandRequest
+import kotlinx.serialization.modules.SerializersModule
+import kotlinx.serialization.modules.polymorphic
+import org.example.requests.FullCommandRequest
 import java.net.DatagramPacket
 import java.net.InetAddress
 import java.net.SocketTimeoutException
-import kotlinx.serialization.serializer
+import org.example.requests.CommandRequestInterface
+import org.example.requests.*
 
 class Client (
     private val serverAdress: String,
@@ -16,7 +18,22 @@ class Client (
 )
 {
     private val socket = DatagramSocket()
-    var json = Json {ignoreUnknownKeys = true}
+
+    val json = Json {
+        ignoreUnknownKeys = true
+        classDiscriminator = "type"
+        serializersModule = SerializersModule {
+            polymorphic(CommandRequestInterface::class) {
+                subclass(NoArgs::class, NoArgs.serializer())
+                subclass(IdRequest::class, IdRequest.serializer())
+                subclass(AddRequest::class, AddRequest.serializer())
+                subclass(AddIfMaxRequest::class, AddIfMaxRequest.serializer())
+                subclass(AddIfMinRequest::class, AddIfMinRequest.serializer())
+                subclass(UpdateIdRequest::class, UpdateIdRequest.serializer())
+                subclass(FilterByEnginePowerRequest::class, FilterByEnginePowerRequest.serializer())
+            }
+        }
+    }
     private var maxRetries : Int
     private var buf = ByteArray(65535)
     init {
@@ -50,8 +67,8 @@ class Client (
         val jsonResponse = sendRequest(jsonRequest)
         return json.decodeFromString(jsonResponse)
     }
-    inline fun <reified T, reified Args> sendCommand(command: String, arguments: Args? = null): T {
-        val request = CommandRequest(command, arguments)
+    inline fun <reified T> sendCommand(command: String, arguments: CommandRequestInterface): T {
+        val request = FullCommandRequest(command, arguments)
         val jsonRequest = json.encodeToString(request)
         val jsonResponse = sendRequest(jsonRequest)
         return json.decodeFromString(jsonResponse)

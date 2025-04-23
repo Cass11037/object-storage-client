@@ -4,4 +4,4 @@ import kotlinx.serialization.Serializable
 import org.example.model.Vehicle
 
 @Serializable
-data class AddIfMinRequest(val vehicle: Vehicle)
+data class AddIfMinRequest(val vehicle: Vehicle) : CommandRequestInterface()
