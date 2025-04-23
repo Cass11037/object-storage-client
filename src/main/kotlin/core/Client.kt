@@ -17,23 +17,33 @@ class Client (
 {
     private val socket = DatagramSocket()
     var json = Json {ignoreUnknownKeys = true}
+    private var maxRetries : Int
     private var buf = ByteArray(65535)
     init {
         socket.soTimeout = 5000
+        maxRetries = 3
     }
     fun sendRequest(request: String) : String {
-        return try {
-        buf = request.toByteArray()
-        var packet = DatagramPacket(buf, buf.size, InetAddress.getByName(serverAdress), serverPort);
-        socket.send(packet)
-        packet = DatagramPacket(buf, buf.size)
-        socket.receive(packet)
-       String(packet.data, 0, packet.length).trim() }
-        catch (e: SocketTimeoutException) {
-            throw RuntimeException("Server did not respond within the timeout period.")
-        } catch (e: Exception) {
-            throw RuntimeException("Network error: ${e.message}")
+        var attempt = 0
+        while (attempt < maxRetries) {
+
+            try {
+                buf = request.toByteArray()
+                var packet = DatagramPacket(buf, buf.size, InetAddress.getByName(serverAdress), serverPort);
+                socket.send(packet)
+                packet = DatagramPacket(buf, buf.size)
+                socket.receive(packet)
+                return String(packet.data, 0, packet.length).trim()
+            } catch (e: SocketTimeoutException) {
+                attempt++
+                if (attempt == maxRetries) {
+                    throw RuntimeException("Server did not respond within the timeout period.")
+                }
+            } catch (e: Exception) {
+                throw RuntimeException("Network error: ${e.message}")
+            }
         }
+        throw RuntimeException("Unknown error")
     }
     inline fun <reified T> sendRequest(obj: Any): T {
         val jsonRequest = json.encodeToString(obj)

@@ -6,7 +6,6 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
 
-
 class CommandProcessor(
     private val client: Client,
     private val ioManager: IOManager,
@@ -79,9 +78,9 @@ class CommandProcessor(
         ioManager.outputLine("Transport manager 3000")
         try {
             val noObject = NoArgs
-            val helpResponse: List<String> = client.sendCommand("help", noObject )
+            val helpResponse: List<String> = client.sendCommand("help", noObject)
             ioManager.outputLine("Available commands: ${helpResponse.joinToString(", ")}")
-        }  catch (e: Exception) {
+        } catch (e: Exception) {
             ioManager.error("Failed to fetch help information: ${e.message}")
         }
         while (true) {
@@ -97,19 +96,11 @@ class CommandProcessor(
         }
     }
 
-    /*private fun loadCommands(): Set<String> {
-        return try {
-            client.sendRequest("get_commands" to "")
-        } catch (e: Exception) {
-            ioManager.error("Failed to load commands: ${e.message}")
-            emptySet()
-        }
-    }*/
-
     private fun processCommand(input: String) {
         val parts = input.split("\\s+".toRegex(), 2)
         val commandName = parts[0]
         try {
+            // Если команда есть в мапе, обрабатываем ее с соответствующими аргументами
             val response = if (commandArgBuilders.containsKey(commandName)) {
                 val args = commandArgBuilders[commandName]?.invoke()
                 client.sendCommand<String, Any>(commandName, args)
@@ -117,6 +108,7 @@ class CommandProcessor(
                 // Если команды нет в мапе, обрабатываем как обычную команду с аргументами
                 client.sendCommand<String, List<String>>(commandName, parts.drop(1))
             }
+
             ioManager.outputLine(response)
 
         } catch (e: Exception) {
@@ -125,7 +117,6 @@ class CommandProcessor(
     }
 
     private fun executeScript(nameOfFile: String) {
-
         if (nameOfFile in executedScripts) {
             ioManager.error("Recursion detected: $nameOfFile")
             return
@@ -135,7 +126,7 @@ class CommandProcessor(
             throw StackOverflowError("Max script recursion depth ($maxRecursionDepth) exceeded")
         }
 
-        val path = Paths.get(nameOfFile) //TODO норм или нет
+        val path = Paths.get(nameOfFile)
         if (!Files.exists(path)) {
             ioManager.error("File not found: $nameOfFile")
             return
