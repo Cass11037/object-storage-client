@@ -1,31 +1,88 @@
 package org.example.core
 
 import IOManager
-import org.example.commands.*
+import org.example.requests.*
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
 
-
 class CommandProcessor(
-    private var commands: Map<String, Command>,
+    private val client: Client,
     private val ioManager: IOManager,
-    fileName: String
 ) {
     private lateinit var vehicleReader: VehicleReader
+    private val commandArgBuilders: Map<String, () -> Any?> = mapOf(
+        "add" to {
+            val reader = VehicleReader(ioManager)
+            AddRequest(reader.readVehicle())
+        },
+        "add_if_max" to {
+            val reader = VehicleReader(ioManager)
+            AddIfMaxRequest(reader.readVehicle())
+        },
+        "add_if_min" to {
+            val reader = VehicleReader(ioManager)
+            AddIfMinRequest(reader.readVehicle())
+        },
+        "clear" to {
+            NoArgs
+        },
+        "filter_by_engine_power" to {
+            ioManager.outputLine("Enter min engine power:")
+            val power = ioManager.readLine().toIntOrNull()
+                ?: throw IllegalArgumentException("Invalid engine power")
+            FilterByEnginePowerRequest(power)
+        },
+        "info" to {
+            NoArgs
+        },
+        "min_by_name" to {
+            NoArgs
+        },
+        "remove_any_by_engine_power" to {
+            ioManager.outputLine("Enter engine power:")
+            val power = ioManager.readLine().toIntOrNull()
+                ?: throw IllegalArgumentException("Invalid engine power")
+            FilterByEnginePowerRequest(power)
+        },
+        "remove_by_id" to {
+            ioManager.outputLine("Enter ID:")
+            val id = ioManager.readLine().toIntOrNull()
+                ?: throw IllegalArgumentException("Invalid ID")
+            IdRequest(id)
+        },
+        "remove_first" to {
+            NoArgs
+        },
+        "show" to {
+            NoArgs
+        },
+        "save" to {
+            NoArgs
+        },
+        "update_id" to {
+            ioManager.outputLine("Enter ID:")
+            val id = ioManager.readLine().toIntOrNull()
+                ?: throw IllegalArgumentException("Invalid ID")
+            val reader = VehicleReader(ioManager)
+            UpdateIdRequest(id, reader.readVehicle())
+        }
+    )
 
-    constructor(ioManager: IOManager, fileName: String) : this(emptyMap(), ioManager, fileName)
-
-    val collectionManager = CollectionManager(fileName)
     private val maxRecursionDepth = 5
     private var recursionDepth = 0
     private val executedScripts =
         mutableSetOf<String>() // protection against recursion & may be a file reading in the file
 
     fun start() {
-        if (commands.isEmpty()) commands = loadCommands()
         ioManager.outputLine("Transport manager 3000")
-        commands["help"]?.execute(emptyList(), collectionManager, ioManager)
+        try {
+            val noObject = NoArgs
+            val helpResponse: List<String> = client.sendCommand("help", noObject)
+            ioManager.outputLine("Available commands: ${helpResponse.joinToString(", ")}")
+        } catch (e: Exception) {
+            ioManager.error("Failed to fetch help information: ${e.message}")
+        }
         while (true) {
             ioManager.outputInline("> ")
             val input = ioManager.readLine().trim()
@@ -39,76 +96,29 @@ class CommandProcessor(
         }
     }
 
-    private fun loadCommands(): Map<String, Command> {
-        vehicleReader = VehicleReader(ioManager)
-        val commands = listOf(
-            AddCommand(vehicleReader),
-            AddIfMaxCommand(vehicleReader),
-            AddIfMinCommand(vehicleReader),
-            ClearCommand(),
-            FilterByEnginePowerCommand(),
-            HelpCommand(emptyMap()),
-            InfoCommand(),
-            MinByNameCommand(),
-            RemoveAnyByEnginePowerCommand(),
-            RemoveByIdCommand(),
-            RemoveFirstCommand(),
-            ShowCommand(),
-            SaveCommand(),
-            UpdateIdCommand(vehicleReader),
-
-            ).associateBy { it.getName() }
-        val help = HelpCommand(commands)
-        val allCommands = listOf(
-            help,
-            AddCommand(vehicleReader),
-            AddIfMaxCommand(vehicleReader),
-            AddIfMinCommand(vehicleReader),
-            ClearCommand(),
-            FilterByEnginePowerCommand(),
-            InfoCommand(),
-            MinByNameCommand(),
-            RemoveAnyByEnginePowerCommand(),
-            RemoveByIdCommand(),
-            RemoveFirstCommand(),
-            ShowCommand(),
-            SaveCommand(),
-            UpdateIdCommand(vehicleReader),
-        ).associateBy { it.getName() }
-        return allCommands
-    }
-
     private fun processCommand(input: String) {
-        val parts = input.split("\\s+".toRegex())
-        val command = commands[parts[0]] ?: run {
-            ioManager.outputLine("Unknown command: ${parts[0]}")
-            return
-        }
-        if (command.getName() == "execute_script") {
-            if (parts.isEmpty()) {
-                ioManager.outputLine("Error: The file name is not specified.")
-                return
-            }
-            executeScript(parts[0])
-            return
-        }
+        val parts = input.split("\\s+".toRegex(), 2)
+        val commandName = parts[0]
         try {
-            command.execute(parts.drop(1), collectionManager, ioManager)
+            // Если команда есть в мапе, обрабатываем ее с соответствующими аргументами
+            val response = if (commandArgBuilders.containsKey(commandName)) {
+                val args = commandArgBuilders[commandName]?.invoke()
+                client.sendCommand<String, Any>(commandName, args)
+            } else {
+                // Если команды нет в мапе, обрабатываем как обычную команду с аргументами
+                client.sendCommand<String, List<String>>(commandName, parts.drop(1))
+            }
+
+            ioManager.outputLine(response)
+
         } catch (e: Exception) {
             ioManager.outputLine("Error executing command: ${e.message}")
         }
     }
 
-    private fun executeScript(input: String) {
-        val parts = input.split("\\s+".toRegex())
-        if (parts.size < 2) {
-            ioManager.error("Syntax: execute_script <filename>")
-            return
-        }
-
-        val filename = parts[1]
-        if (filename in executedScripts) {
-            ioManager.error("Recursion detected: $filename")
+    private fun executeScript(nameOfFile: String) {
+        if (nameOfFile in executedScripts) {
+            ioManager.error("Recursion detected: $nameOfFile")
             return
         }
 
@@ -116,25 +126,25 @@ class CommandProcessor(
             throw StackOverflowError("Max script recursion depth ($maxRecursionDepth) exceeded")
         }
 
-        val path = Paths.get(filename) //TODO норм или нет
+        val path = Paths.get(nameOfFile)
         if (!Files.exists(path)) {
-            ioManager.error("File not found: $filename")
+            ioManager.error("File not found: $nameOfFile")
             return
         }
 
         if (!Files.isReadable(path)) {
-            ioManager.error("Access denied: $filename")
+            ioManager.error("Access denied: $nameOfFile")
             return
         }
 
         recursionDepth++
-        executedScripts.add(filename)
+        executedScripts.add(nameOfFile)
         try {
             processScriptFile(path)
         } catch (e: Exception) {
             ioManager.error("Script error: ${e.message}")
         } finally {
-            executedScripts.remove(filename)
+            executedScripts.remove(nameOfFile)
             recursionDepth--
         }
     }
@@ -178,11 +188,5 @@ class CommandProcessor(
         } else {
             ioManager.error("Неполные данные для команды add в скрипте")
         }
-    }
-    fun getCommands(): Map<String, Command> {
-        return commands
-    }
-    fun setCommands(com: Map<String, Command>) {
-         commands=com
     }
 }
