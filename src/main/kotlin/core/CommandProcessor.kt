@@ -51,33 +51,27 @@ class CommandProcessor(
 
     private fun processCommand(input: String) {
         val parts = input.split("\\s+".toRegex())
-        if (command.getName() == "execute_script") {
-            if (parts.isEmpty()) {
-                ioManager.outputLine("Error: The file name is not specified.")
-                return
-            }
-            executeScript(parts[0])
-            return
-        }
         try {
            val commandName = parts[0]
+            if (commandName == "execute_script") {
+                if (parts.size < 2) {
+                    ioManager.outputLine("Error: The file name is not specified.")
+                    return
+                }
+                executeScript(parts[1])
+                return
+            }
             val args = parts.drop(1).joinToString { " " }
-            val response - cl
+            val response = client.sendRequest<Pair<String, String>>(commandName to args)
         } catch (e: Exception) {
             ioManager.outputLine("Error executing command: ${e.message}")
         }
     }
 
-    private fun executeScript(input: String) {
-        val parts = input.split("\\s+".toRegex())
-        if (parts.size < 2) {
-            ioManager.error("Syntax: execute_script <filename>")
-            return
-        }
+    private fun executeScript(nameOfFile: String) {
 
-        val filename = parts[1]
-        if (filename in executedScripts) {
-            ioManager.error("Recursion detected: $filename")
+        if (nameOfFile in executedScripts) {
+            ioManager.error("Recursion detected: $nameOfFile")
             return
         }
 
@@ -85,25 +79,25 @@ class CommandProcessor(
             throw StackOverflowError("Max script recursion depth ($maxRecursionDepth) exceeded")
         }
 
-        val path = Paths.get(filename) //TODO норм или нет
+        val path = Paths.get(nameOfFile) //TODO норм или нет
         if (!Files.exists(path)) {
-            ioManager.error("File not found: $filename")
+            ioManager.error("File not found: $nameOfFile")
             return
         }
 
         if (!Files.isReadable(path)) {
-            ioManager.error("Access denied: $filename")
+            ioManager.error("Access denied: $nameOfFile")
             return
         }
 
         recursionDepth++
-        executedScripts.add(filename)
+        executedScripts.add(nameOfFile)
         try {
             processScriptFile(path)
         } catch (e: Exception) {
             ioManager.error("Script error: ${e.message}")
         } finally {
-            executedScripts.remove(filename)
+            executedScripts.remove(nameOfFile)
             recursionDepth--
         }
     }
